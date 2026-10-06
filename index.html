@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>新手健身紀錄 PWA</title>
+  <title>新手 PPL 健身紀錄</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#4A90E2">
   <style>
@@ -54,19 +54,34 @@
       box-sizing: border-box;
       font-size: 1rem;
     }
-    .row {
-      display: flex;
-      gap: 10px;
+    .exercise-block {
+      background: #F8FAFC;
+      border-left: 4px solid var(--primary);
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
     }
-    .row .form-group {
-      flex: 1;
+    .exercise-title {
+      font-weight: bold;
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+      color: #2C3E50;
+    }
+    .inputs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .inputs-grid input {
+      font-size: 0.9rem;
+      padding: 8px;
     }
     button.btn-submit {
       background-color: var(--primary);
       color: white;
       border: none;
       font-weight: bold;
-      margin-top: 8px;
+      margin-top: 10px;
       cursor: pointer;
     }
     button.btn-submit:active {
@@ -84,12 +99,15 @@
       display: flex;
       justify-content: space-between;
       font-weight: bold;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       color: var(--primary);
+      border-bottom: 1px solid #EEE;
+      padding-bottom: 6px;
     }
-    .log-detail {
-      font-size: 0.95rem;
-      color: #555;
+    .log-detail-line {
+      font-size: 0.9rem;
+      color: #444;
+      margin-bottom: 4px;
     }
     .delete-btn {
       position: absolute;
@@ -107,7 +125,7 @@
 </head>
 <body>
 
-  <h1>🏋️‍♂️ 新手器械健身紀錄</h1>
+  <h1>🏋️‍♂️ PPL 健身菜單紀錄</h1>
 
   <!-- 新增紀錄表單 -->
   <div class="card">
@@ -116,40 +134,19 @@
       <input type="date" id="date">
     </div>
 
-    <div class="row">
-      <div class="form-group">
-        <label for="category">訓練部位</label>
-        <select id="category" onchange="updateEquipmentOptions()">
-          <option value="胸部">胸部</option>
-          <option value="背部">背部</option>
-          <option value="腿部">腿部</option>
-          <option value="肩部">肩部</option>
-          <option value="手臂/核心">手臂/核心</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="equipment">器械器材</label>
-        <select id="equipment"></select>
-      </div>
+    <div class="form-group">
+      <label for="workoutRoutine">選擇今日菜單</label>
+      <select id="workoutRoutine" onchange="renderExerciseForm()">
+        <option value="Push">推日 (Push)</option>
+        <option value="Pull">拉日 (Pull)</option>
+        <option value="Leg">腿日 (Leg)</option>
+      </select>
     </div>
 
-    <div class="row">
-      <div class="form-group">
-        <label for="weight">重量 (kg)</label>
-        <input type="number" id="weight" placeholder="30" step="2.5">
-      </div>
-      <div class="form-group">
-        <label for="reps">次數 (下)</label>
-        <input type="number" id="reps" placeholder="12">
-      </div>
-      <div class="form-group">
-        <label for="sets">組數</label>
-        <input type="number" id="sets" placeholder="4">
-      </div>
-    </div>
+    <!-- 動態生成動作填寫區 -->
+    <div id="exerciseFormContainer"></div>
 
-    <button class="btn-submit" onclick="addLog()">新增訓練紀錄</button>
+    <button class="btn-submit" onclick="addLog()">儲存今日訓練</button>
   </div>
 
   <!-- 歷史紀錄顯示區 -->
@@ -157,100 +154,93 @@
   <div id="logList"></div>
 
   <script>
-    // 預設器械式器材選單
-    const equipmentData = {
-      '胸部': ['座姿胸推機', '蝴蝶機夾胸', '上斜胸推機'],
-      '背部': ['滑輪下拉機', '座姿划船機', '高位下拉機'],
-      '腿部': ['腿多功能推舉機', '坐姿大腿伸展機', '臥姿大腿彎舉機'],
-      '肩部': ['座姿肩推機', '機械飛鳥 (後三角)'],
-      '手臂/核心': ['三頭肌下壓機', '二頭肌彎舉機', '機械捲腹機']
+    // 菜單與對應器材設定
+    const routines = {
+      'Push': { name: '推日 (Push)', exercises: ['坐姿胸推機', '坐姿肩推機', '夾胸機', '三頭下壓'] },
+      'Pull': { name: '拉日 (Pull)', exercises: ['滑輪下拉', '坐姿水平划船', '反向飛鳥機', '二頭彎舉機'] },
+      'Leg':  { name: '腿日 (Leg)',  exercises: ['腿推機', '坐姿腿伸展機', '坐姿腿屈體機', '坐姿外展肌機'] }
     };
 
-    // 初始化日期預設為今天
+    // 初始化預設今天日期
     document.getElementById('date').value = new Date().toISOString().split('T')[0];
 
-    // 動態更新器材選單
-    function updateEquipmentOptions() {
-      const category = document.getElementById('category').value;
-      const equipmentSelect = document.getElementById('equipment');
-      equipmentSelect.innerHTML = '';
-      
-      equipmentData[category].forEach(item => {
-        const option = document.createElement('option');
-        option.value = item;
-        option.textContent = item;
-        equipmentSelect.appendChild(option);
+    // 動態生成該菜單的動作表單
+    function renderExerciseForm() {
+      const routineKey = document.getElementById('workoutRoutine').value;
+      const exercises = routines[routineKey].exercises;
+      const container = document.getElementById('exerciseFormContainer');
+      container.innerHTML = '';
+
+      exercises.forEach((ex, index) => {
+        const div = document.createElement('div');
+        div.className = 'exercise-block';
+        div.innerHTML = `
+          <div class="exercise-title">${index + 1}. ${ex}</div>
+          <div class="inputs-grid">
+            <div>
+              <label>重量 (kg)</label>
+              <input type="number" class="input-weight" data-name="${ex}" placeholder="0" step="2.5">
+            </div>
+            <div>
+              <label>組數</label>
+              <input type="number" class="input-sets" placeholder="0">
+            </div>
+            <div>
+              <label>次數/組</label>
+              <input type="number" class="input-reps" placeholder="0">
+            </div>
+          </div>
+        `;
+        container.appendChild(div);
       });
     }
 
-    // 新增紀錄到 localStorage
+    // 儲存紀錄至 localStorage
     function addLog() {
       const date = document.getElementById('date').value;
-      const category = document.getElementById('category').value;
-      const equipment = document.getElementById('equipment').value;
-      const weight = document.getElementById('weight').value;
-      const reps = document.getElementById('reps').value;
-      const sets = document.getElementById('sets').value;
+      const routineKey = document.getElementById('workoutRoutine').value;
+      const routineName = routines[routineKey].name;
 
-      if (!weight || !reps || !sets) {
-        alert('請填寫完整重量、次數與組數！');
+      const blocks = document.querySelectorAll('.exercise-block');
+      const items = [];
+
+      blocks.forEach(block => {
+        const name = block.querySelector('.input-weight').dataset.name;
+        const weight = block.querySelector('.input-weight').value || 0;
+        const sets = block.querySelector('.input-sets').value || 0;
+        const reps = block.querySelector('.input-reps').value || 0;
+
+        // 只儲存有填寫重量或組數的項目
+        if (weight > 0 || sets > 0) {
+          items.push({ name, weight, sets, reps });
+        }
+      });
+
+      if (items.length === 0) {
+        alert('請至少填寫一項器材的訓練數據！');
         return;
       }
 
-      const newLog = { id: Date.now(), date, category, equipment, weight, reps, sets };
-      const logs = JSON.parse(localStorage.getItem('fitnessLogs') || '[]');
-      logs.unshift(newLog); // 最新發布的在最前
-      localStorage.setItem('fitnessLogs', JSON.stringify(logs));
+      const newRecord = {
+        id: Date.now(),
+        date,
+        routineName,
+        items
+      };
+
+      const logs = JSON.parse(localStorage.getItem('pplFitnessLogs') || '[]');
+      logs.unshift(newRecord);
+      localStorage.setItem('pplFitnessLogs', JSON.stringify(logs));
 
       renderLogs();
+      alert('訓練紀錄已成功儲存！');
     }
 
     // 渲染歷史紀錄
     function renderLogs() {
       const logList = document.getElementById('logList');
       logList.innerHTML = '';
-      const logs = JSON.parse(localStorage.getItem('fitnessLogs') || '[]');
+      const logs = JSON.parse(localStorage.getItem('pplFitnessLogs') || '[]');
 
       if (logs.length === 0) {
-        logList.innerHTML = '<p style="text-align:center; color:#888;">目前還沒有紀錄，開始第一次訓練吧！</p>';
-        return;
-      }
-
-      logs.forEach(log => {
-        const item = document.createElement('div');
-        item.className = 'log-item';
-        item.innerHTML = `
-          <button class="delete-btn" onclick="deleteLog(${log.id})">✕</button>
-          <div class="log-header">
-            <span>${log.date} - ${log.equipment}</span>
-            <span>${log.category}</span>
-          </div>
-          <div class="log-detail">
-            重量：<strong>${log.weight} kg</strong> | 次數：<strong>${log.reps} 下</strong> | 組數：<strong>${log.sets} 組</strong>
-          </div>
-        `;
-        logList.appendChild(item);
-      });
-    }
-
-    // 刪除單筆紀錄
-    function deleteLog(id) {
-      let logs = JSON.parse(localStorage.getItem('fitnessLogs') || '[]');
-      logs = logs.filter(log => log.id !== id);
-      localStorage.setItem('fitnessLogs', JSON.stringify(logs));
-      renderLogs();
-    }
-
-    // 初始化頁面
-    updateEquipmentOptions();
-    renderLogs();
-
-    // 註冊 Service Worker (PWA 離線支援)
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js')
-        .then(() => console.log('Service Worker 註冊成功！'))
-        .catch(err => console.error('SW 註冊失敗:', err));
-    }
-  </script>
-</body>
-</html>
+        logList.innerHTML = '<p
